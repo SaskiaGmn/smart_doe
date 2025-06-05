@@ -14,7 +14,7 @@ from gpytorch.priors.torch_priors import GammaPrior
 from utils.conversion_utils import matplotlib_to_png
 from optimization.bayesian_optimization_loop import BayesianOptimizationLoop
 
-def setup_first_model(num_dimensions: int = 3, bounds: dict = None):
+def setup_first_model(num_dimensions: int = 3, bounds: dict = None, sampling_method: str = 'lhs'):
     try:
         # Create a multi-dimensional dataset
         dataset = DatasetManager(dtype=torch.float64, num_input_dimensions=num_dimensions)
@@ -28,7 +28,7 @@ def setup_first_model(num_dimensions: int = 3, bounds: dict = None):
         dataset.func_create_dataset(
             FunctionFactory.multi_inputs,
             num_datapoints=5,
-            sampling_method="random",
+            sampling_method=sampling_method,
             noise_level=0.1,
             **ranges
         )

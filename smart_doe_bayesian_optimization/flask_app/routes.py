@@ -17,12 +17,13 @@ def index():
 def initialize():
     global gp_model, gp_optimizer, current_suggestion
     
-    # Get the number of dimensions from the request
+    # Get the number of dimensions and sampling method from the request
     data = request.get_json()
     num_dimensions = data.get('num_dimensions', 3)
+    sampling_method = data.get('sampling_method', 'lhs')
     
     # Initialize the model
-    gp_model = setup_first_model(num_dimensions=num_dimensions)
+    gp_model = setup_first_model(num_dimensions=num_dimensions, sampling_method=sampling_method)
     gp_optimizer, current_suggestion = setup_optimization_loop(gp_model)
     
     # Convert the suggestion to a list

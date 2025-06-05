@@ -56,6 +56,14 @@
         <h2>Initialisierung</h2>
         <label for="numParams">Anzahl der Parameter:</label>
         <input type="number" id="numParams" value="3" min="1" max="10">
+        <div style="margin: 20px 0;">
+            <label for="samplingMethod">Sampling-Methode:</label>
+            <select id="samplingMethod">
+                <option value="lhs">Latin Hypercube Sampling (LHS)</option>
+                <option value="space_filling_lhs">Space-Filling LHS</option>
+                <option value="fractional_factorial">Fractional Factorial</option>
+            </select>
+        </div>
         <button onclick="showBoundsInput()">Weiter</button>
     </div>
 
@@ -98,6 +106,7 @@
 
         function initializeModel() {
             const numParams = parseInt(document.getElementById('numParams').value);
+            const samplingMethod = document.getElementById('samplingMethod').value;
             const bounds = {};
             
             for (let i = 0; i < numParams; i++) {
@@ -124,7 +133,8 @@
                 },
                 body: JSON.stringify({
                     num_dimensions: numParams,
-                    bounds: bounds
+                    bounds: bounds,
+                    sampling_method: samplingMethod
                 })
             })
             .then(response => response.json())
