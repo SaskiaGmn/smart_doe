@@ -14,7 +14,7 @@ from gpytorch.priors.torch_priors import GammaPrior
 
 from botorch import fit_gpytorch_mll
 
-# Erstelle einen mehrdimensionalen Datensatz
+# Create a multi-dimensional dataset
 dataset = DatasetManager(dtype=torch.float64, num_input_dimensions=3)
 dataset.func_create_dataset(
     FunctionFactory.multi_inputs,

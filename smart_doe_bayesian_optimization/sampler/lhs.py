@@ -17,10 +17,10 @@ def build_lhs(bounds: Dict[str, Tuple[float, float]], num_points: int) -> torch.
     """
     num_dimensions = len(bounds)
     
-    # Erstelle LHS mit pyDOE
+    # Create LHS with pyDOE
     samples = lhs(num_dimensions, samples=num_points, criterion='center')
     
-    # Skaliere die Samples auf die tatsächlichen Grenzen
+    # Scale the samples to the actual bounds
     for i, (param_name, (min_val, max_val)) in enumerate(bounds.items()):
         samples[:, i] = samples[:, i] * (max_val - min_val) + min_val
     

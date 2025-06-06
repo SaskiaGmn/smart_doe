@@ -16,10 +16,10 @@ def build_space_filling_lhs(bounds: Dict[str, Tuple[float, float]], num_points: 
     """
     num_dimensions = len(bounds)
     
-    # Erstelle LHS mit pyDOE und maximin Kriterium
+    # Create LHS with pyDOE and maximin criterion
     samples = lhs(num_dimensions, samples=num_points, criterion='maximin')
     
-    # Skaliere die Samples auf die tatsächlichen Grenzen
+    # Scale the samples to the actual bounds
     for i, (param_name, (min_val, max_val)) in enumerate(bounds.items()):
         samples[:, i] = samples[:, i] * (max_val - min_val) + min_val
     
