@@ -1,6 +1,6 @@
 import torch
 from typing import Callable, Dict, Tuple
-from sampler import build_lhs, build_space_filling_lhs, build_fractional_factorial
+from sampler import build_lhs, build_space_filling_lhs, build_fractional_factorial, build_full_factorial
 
 # TODO: implement transform data function
 # TODO: implement receive dataset from filepath function
@@ -28,16 +28,19 @@ class DatasetManager:
         Args:
             dataset_func: Funktion, die die Ausgabewerte berechnet
             num_datapoints: Anzahl der zu erstellenden Datenpunkte
-            sampling_method: Methode zur Stichprobenziehung ("grid", "random", "lhs", "space_filling_lhs", "fractional_factorial")
+            sampling_method: Methode zur Stichprobenziehung ("grid", "random", "lhs", "space_filling_lhs", "fractional_factorial", "full_factorial")
             noise_level: Standardabweichung des Rauschens
             **kwargs: Zusätzliche Parameter für die Stichprobenziehung
         """
         self.num_datapoints = num_datapoints
 
-        # Erstelle bounds dictionary aus kwargs
-        bounds = {key: value for key, value in kwargs.items() if "range" in key}
+        # Create bounds dictionary from kwargs
+        bounds = {}
+        for key, value in kwargs.items():
+            if "range" in key:
+                bounds[key] = value
         
-        # Wähle die entsprechende Sampling-Methode
+        # Choose the corresponding sampling method
         if sampling_method == "random":
             inputs = self._random_sampling(bounds, num_datapoints)
         elif sampling_method == "grid":
@@ -47,10 +50,11 @@ class DatasetManager:
         elif sampling_method == "space_filling_lhs":
             inputs = build_space_filling_lhs(bounds, num_datapoints)
         elif sampling_method == "fractional_factorial":
-            resolution = kwargs.get('resolution', 3)
-            inputs = build_fractional_factorial(bounds, resolution)
+            inputs = build_fractional_factorial(bounds)
+        elif sampling_method == "full_factorial":
+            inputs = build_full_factorial(bounds)
         else:
-            raise ValueError("Sampling method must be one of: 'random', 'grid', 'lhs', 'space_filling_lhs', 'fractional_factorial'")
+            raise ValueError("Sampling method must be one of: 'random', 'grid', 'lhs', 'space_filling_lhs', 'fractional_factorial', 'full_factorial'")
 
         self.setbounds(**kwargs)
 
@@ -67,14 +71,14 @@ class DatasetManager:
         self.check_dimensions(inputs, outputs)
 
     def _random_sampling(self, bounds: Dict[str, Tuple[float, float]], num_points: int) -> torch.Tensor:
-        """Erstellt zufällige Samples."""
+        """Creates random samples."""
         inputs = []
         for range_val in bounds.values():
             inputs.append(torch.rand(num_points) * (range_val[1] - range_val[0]) + range_val[0])
         return torch.stack(inputs, dim=1)
 
     def _grid_sampling(self, bounds: Dict[str, Tuple[float, float]], num_points: int) -> torch.Tensor:
-        """Erstellt Samples auf einem regelmäßigen Gitter."""
+        """Creates samples on a regular grid."""
         inputs = []
         for range_val in bounds.values():
             inputs.append(torch.linspace(range_val[0], range_val[1], steps=num_points))

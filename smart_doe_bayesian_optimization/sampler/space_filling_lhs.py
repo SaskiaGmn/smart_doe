@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from typing import Dict, Tuple, List
-from pyDOE import lhs
+from pyDOE3 import lhs
 
 def build_space_filling_lhs(bounds: Dict[str, Tuple[float, float]], num_points: int) -> torch.Tensor:
     """

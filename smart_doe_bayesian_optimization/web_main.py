@@ -27,7 +27,7 @@ def setup_first_model(num_dimensions: int = 3, bounds: dict = None, sampling_met
         
         dataset.func_create_dataset(
             FunctionFactory.multi_inputs,
-            num_datapoints=5,
+            num_datapoints=10,
             sampling_method=sampling_method,
             noise_level=0.1,
             **ranges
