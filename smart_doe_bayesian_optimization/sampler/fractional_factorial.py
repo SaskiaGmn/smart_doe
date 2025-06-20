@@ -11,12 +11,25 @@ def build_fractional_factorial(bounds: Dict[str, Tuple[float, float]], main_fact
     
     Args:
         bounds: Dictionary mit Parameternamen als Schlüssel und (min, max) Tupeln als Werte
+        main_factors: Anzahl der Hauptfaktoren (muss kleiner als die Gesamtanzahl der Faktoren sein)
         
     Returns:
         torch.Tensor: Tensor mit den generierten Punkten
+        
+    Raises:
+        ValueError: Wenn die Anzahl der Hauptfaktoren ungültig ist oder das Design nicht möglich ist
     """
-
     num_dimensions = len(bounds)
+    
+    # Validate main factors
+    if main_factors is None:
+        raise ValueError("Main factors must be specified for fractional factorial design")
+    if main_factors < 2:
+        raise ValueError("Number of main factors must be at least 2")
+    if main_factors >= num_dimensions:
+        raise ValueError(f"Number of main factors ({main_factors}) must be less than total factors ({num_dimensions})")
+
+    # Calculate maximum possible interactions
     max_possible_interactions = sum(
         len(list(itertools.combinations(range(main_factors), r)))
         for r in range(2, main_factors + 1)
@@ -24,7 +37,8 @@ def build_fractional_factorial(bounds: Dict[str, Tuple[float, float]], main_fact
 
     num_generated = num_dimensions - main_factors
     if max_possible_interactions < num_generated:
-        raise ValueError("Design is not possible with the given number of main factors")
+        raise ValueError(f"Design is not possible with {main_factors} main factors and {num_dimensions} total factors. "
+                        f"Need at least {num_generated} possible interactions, but only have {max_possible_interactions}")
 
     # Create aliases A, B, C, D, ...
     factors = [chr(65 + i) for i in range(num_dimensions)]  # ['A', 'B', 'C', 'D']

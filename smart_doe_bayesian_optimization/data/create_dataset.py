@@ -1,6 +1,6 @@
 import torch
 from typing import Callable, Dict, Tuple
-from sampler import build_lhs, build_space_filling_lhs, build_fractional_factorial, build_full_factorial
+from sampler import build_lhs, build_space_filling_lhs, build_fractional_factorial, build_full_factorial, build_taguchi
 
 # TODO: implement transform data function
 # TODO: implement receive dataset from filepath function
@@ -50,11 +50,13 @@ class DatasetManager:
         elif sampling_method == "space_filling_lhs":
             inputs = build_space_filling_lhs(bounds, num_datapoints)
         elif sampling_method == "fractional_factorial":
-            inputs = build_fractional_factorial(bounds)
+            inputs = build_fractional_factorial(bounds, main_factors=kwargs.get('main_factors', 3))
         elif sampling_method == "full_factorial":
             inputs = build_full_factorial(bounds)
+        elif sampling_method == "taguchi":
+            inputs = build_taguchi(bounds)
         else:
-            raise ValueError("Sampling method must be one of: 'random', 'grid', 'lhs', 'space_filling_lhs', 'fractional_factorial', 'full_factorial'")
+            raise ValueError("Sampling method must be one of: 'random', 'grid', 'lhs', 'space_filling_lhs', 'fractional_factorial', 'full_factorial', 'taguchi'")
 
         self.setbounds(**kwargs)
 

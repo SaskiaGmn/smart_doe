@@ -14,7 +14,7 @@ from gpytorch.priors.torch_priors import GammaPrior
 from utils.conversion_utils import matplotlib_to_png
 from optimization.bayesian_optimization_loop import BayesianOptimizationLoop
 
-def setup_first_model(num_dimensions: int = 3, bounds: dict = None, sampling_method: str = 'lhs'):
+def setup_first_model(num_dimensions: int = 3, bounds: dict = None, sampling_method: str = 'lhs', main_factors: int = None):
     try:
         # Create a multi-dimensional dataset
         dataset = DatasetManager(dtype=torch.float64, num_input_dimensions=num_dimensions)
@@ -30,6 +30,7 @@ def setup_first_model(num_dimensions: int = 3, bounds: dict = None, sampling_met
             num_datapoints=10,
             sampling_method=sampling_method,
             noise_level=0.1,
+            main_factors=main_factors,
             **ranges
         )
 
@@ -69,18 +70,24 @@ def setup_first_model(num_dimensions: int = 3, bounds: dict = None, sampling_met
         print(f"Error in setup_first_model: {str(e)}")
         raise
 
-def setup_optimization_loop(gp_model):
+def setup_optimization_loop(gp_model, acq_func_type: str = "LogExp_Improvement", is_maximization: bool = True):
     """Setzt die Optimierungsschleife auf.
     
     Args:
         gp_model: Das trainierte GP-Modell
+        acq_func_type: Typ der Acquisitionsfunktion
+        is_maximization: Ob maximiert oder minimiert werden soll
         
     Returns:
         gp_optimizer: Der Optimizer
         next_value: Tensor mit den vorgeschlagenen Input-Parametern
     """
     try:
-        gp_optimizer = BayesianOptimizationLoop(gp_model)
+        gp_optimizer = BayesianOptimizationLoop(
+            base_model=gp_model,
+            acq_func_type=acq_func_type,
+            is_maximization=is_maximization
+        )
         # Get the first suggestion
         next_value, _ = gp_optimizer.optimization_iteration(num_restarts=40, raw_samples=400)
         # Ensure that next_value has the correct shape (2D)

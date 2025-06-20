@@ -21,9 +21,10 @@ def initialize():
     data = request.get_json()
     num_dimensions = data.get('num_dimensions', 3)
     sampling_method = data.get('sampling_method', 'lhs')
+    main_factors = data.get('main_factors')
     
     # Initialize the model
-    gp_model = setup_first_model(num_dimensions=num_dimensions, sampling_method=sampling_method)
+    gp_model = setup_first_model(num_dimensions=num_dimensions, sampling_method=sampling_method, main_factors=main_factors)
     gp_optimizer, current_suggestion = setup_optimization_loop(gp_model)
     
     # Convert the suggestion to a list
