@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from gpytorch.priors.torch_priors import GammaPrior
 from utils.conversion_utils import matplotlib_to_png
 from optimization.bayesian_optimization_loop import BayesianOptimizationLoop
+from kernel_choice.hyperband_kernel_selector import HyperbandKernelSelector
 
 def setup_first_model(num_dimensions: int = 3, bounds: dict = None, sampling_method: str = 'lhs', main_factors: int = None):
     try:
@@ -34,12 +35,25 @@ def setup_first_model(num_dimensions: int = 3, bounds: dict = None, sampling_met
             **ranges
         )
 
-        # Create a Matern kernel with ARD for multiple dimensions
-        kernel = KernelFactory.create_kernel(
-            'Matern',
-            nu=2.5,
-            lengthscale_prior=GammaPrior(3.0, 6.0)
+        # Extract data and ensure correct shape
+        train_X, train_Y = dataset.unscaled_data
+        # Ensure train_Y has shape (n, 1) for GP training
+        if train_Y.ndim == 1:
+            train_Y = train_Y.unsqueeze(-1)  # [n] -> [n, 1]
+        
+        # Use Hyperband to automatically select the best kernel
+        print("Starting automatic kernel selection with Hyperband...")
+        selector = HyperbandKernelSelector(
+            train_X=train_X,
+            train_Y=train_Y,
+            bounds_list=dataset.bounds_list,
+            mll_weight=0.7,
+            cv_weight=0.3
         )
+        
+        # Select the best kernel
+        best_kernel = selector.select_kernel(random_seed=42)
+        print(f"Selected kernel: {type(best_kernel).__name__}")
 
         likelihood = LikelihoodFactory.create_likelihood(
             'Gaussian',
@@ -55,9 +69,9 @@ def setup_first_model(num_dimensions: int = 3, bounds: dict = None, sampling_met
             "SingleTaskGP",
             "ExactMarginalLogLikelihood",
             "adam",
-            kernel,
-            dataset.unscaled_data[0],
-            dataset.unscaled_data[1],
+            best_kernel,
+            train_X,
+            train_Y,
             likelihood,
             bounds_list=dataset.bounds_list,
             scaling_dict=scaling_dict,

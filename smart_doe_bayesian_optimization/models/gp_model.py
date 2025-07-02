@@ -55,6 +55,7 @@ class BaseGPModel():
         #the optimizer here is only necessary for the traditional torch training without full convergence
         self.optimizer_type = optimizer_type
         self.optimizer = None
+        self.optimizer_kwargs = optimizer_kwargs or {}
         self.model_plots_dict = {}
 
     def to(self, device, dtype):
@@ -103,7 +104,7 @@ class BaseGPModel():
             fit_gpytorch_model(self.mll)
 
         else:
-            print(f"Performing traditional training with {self.optimizer} as an optimizer, training over {num_epochs} epochs!")
+            print(f"Performing traditional training with {self.optimizer_type} optimizer, training over {num_epochs} epochs!")
             # TODO: fit_gpytorch_mll_torch can also be a useable function here - what does it implement/realise better or worse? what should be used here?
             # TODO: optimizer needs to be re-initiated here!
             self.gp_model = training.training_gp_model(gp_model=self.gp_model, optimizer=self.optimizer, mll=self.mll, train_X=self.train_X, train_Y=self.train_Y, num_epochs=num_epochs)
