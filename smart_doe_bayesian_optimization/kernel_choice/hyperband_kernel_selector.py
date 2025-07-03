@@ -1,6 +1,5 @@
-from typing import Dict, List, Any, Tuple, Optional, Callable
+from typing import Dict, List, Any, Tuple, Optional
 from gpytorch.kernels import Kernel, ScaleKernel
-from gpytorch.likelihoods import Likelihood
 from gpytorch.mlls import ExactMarginalLogLikelihood
 from models.gp_model import BaseGPModel
 from models.likelihood_factory import LikelihoodFactory
@@ -13,10 +12,8 @@ import time
 import random
 from dataclasses import dataclass
 from sampler.lhs import build_lhs
-from data.create_dataset import DatasetManager
-import traceback
-from botorch.models.transforms.outcome import OutcomeTransform, Standardize
-from botorch.models.transforms.input import InputTransform, Normalize
+from botorch.models.transforms.outcome import Standardize
+from botorch.models.transforms.input import Normalize
 
 @dataclass
 class HyperbandConfig:
@@ -43,8 +40,8 @@ class HyperbandKernelSelector:
             train_Y: Training output data
             bounds_list: Bounds for the input dimensions
             scaling_dict: Scaling configuration for input/output
-            mll_weight: Weight for Marginal Log-Likelihood (default: 1.0)
-            cv_weight: Weight for Cross-Validation (default: 0.0)
+            mll_weight: Weight for Marginal Log-Likelihood 
+            cv_weight: Weight for Cross-Validation 
         """
         self.train_X = train_X
         if train_Y.ndim == 1:
@@ -63,14 +60,14 @@ class HyperbandKernelSelector:
         self.likelihood = LikelihoodFactory.create_likelihood('Gaussian')
         
         # Determine configuration based on dataset size
-        self.config = self._get_adaptive_config()
+        self.config = self.get_adaptive_config()
         
         # Pre-generate LHS samples for better coverage
-        self._generate_lhs_samples()
+        self.generate_lhs_samples()
         
         self.sample_indices = {kernel_type: 0 for kernel_type in self.lhs_samples.keys()}
         
-    def _get_adaptive_config(self) -> HyperbandConfig:
+    def get_adaptive_config(self) -> HyperbandConfig:
         """
         Get adaptive configuration based on dataset size.
         
@@ -112,12 +109,12 @@ class HyperbandKernelSelector:
             torch.manual_seed(random_seed)
         
         # Run Hyperband optimization
-        best_config = self._hyperband_optimize()
+        best_config = self.run_hyperband_optimization()
         
         # Create and return the best kernel
-        return self._create_kernel_from_config(best_config)
+        return self.create_kernel_from_config(best_config)
     
-    def _hyperband_optimize(self) -> Dict[str, Any]:
+    def run_hyperband_optimization(self) -> Dict[str, Any]:
         """
         Run Hyperband optimization to find the best kernel configuration.
         
@@ -139,7 +136,7 @@ class HyperbandKernelSelector:
             r = self.config.epochs_per_level[0] * (self.config.eta ** s)
             
             # Generate random configurations
-            configs = [self._generate_random_kernel_config() for _ in range(n)]
+            configs = [self.generate_random_kernel_config() for _ in range(n)]
             
             # Successive halving
             for i in range(s + 1):
@@ -155,7 +152,7 @@ class HyperbandKernelSelector:
                     if time.time() - start_time > self.config.max_time_seconds:
                         break
                     
-                    score = self._evaluate_kernel_config(config, r_i)
+                    score = self.evaluate_kernel_config(config, r_i)
                     scores.append(score)
                     
                     # Update best if better
@@ -179,15 +176,29 @@ class HyperbandKernelSelector:
         
         return best_config
     
-    def _generate_random_kernel_config(self) -> Dict[str, Any]:
+    def generate_random_kernel_config(self) -> Dict[str, Any]:
         """
-        Generate a random kernel configuration using pre-generated LHS samples.
+        Generate a kernel configuration using pre-generated LHS samples.
+        Ensures equal distribution across kernel types.
         
         Returns:
-            Random kernel configuration dictionary
+            Kernel configuration dictionary
         """
         kernel_types = ['RBF', 'Matern', 'Linear', 'Periodic', 'Polynomial']
-        kernel_type = random.choice(kernel_types)
+        
+        # Calculate how many configurations we need per kernel type
+        total_configs_needed = self.config.max_iter
+        configs_per_kernel = total_configs_needed // len(kernel_types)
+        
+        # Determine which kernel type to generate based on current count
+        current_total = sum(self.sample_indices.values())
+        kernel_type_idx = current_total // configs_per_kernel
+        
+        # If we've generated enough of each type, cycle through them
+        if kernel_type_idx >= len(kernel_types):
+            kernel_type_idx = current_total % len(kernel_types)
+        
+        kernel_type = kernel_types[kernel_type_idx]
         
         config = {'type': kernel_type}
         
@@ -222,7 +233,7 @@ class HyperbandKernelSelector:
         
         return config
     
-    def _evaluate_kernel_config(self, config: Dict[str, Any], epochs: int) -> float:
+    def evaluate_kernel_config(self, config: Dict[str, Any], epochs: int) -> float:
         """
         Evaluate a kernel configuration by training a GP model and computing scores.
         
@@ -234,11 +245,8 @@ class HyperbandKernelSelector:
             Combined score (weighted MLL + LOO-CV)
         """
         try:
-            print(f"[DEBUG] Evaluating config: {config} with epochs: {epochs}")
-            
             # Create kernel
-            kernel = self._create_kernel_from_config(config)
-            print(f"[DEBUG] Kernel created successfully: {type(kernel).__name__}")
+            kernel = self.create_kernel_from_config(config)
             
             # Create transforms
             outcome_transform = Standardize(m=self.train_Y.shape[1])
@@ -254,37 +262,33 @@ class HyperbandKernelSelector:
                 outcome_transform=outcome_transform,
                 input_transform=input_transform
             )
-            print(f"[DEBUG] Model created successfully")
             
             # Train model
             mll = ExactMarginalLogLikelihood(gp_model.likelihood, gp_model)
-            print(f"[DEBUG] Starting training with {epochs} epochs...")
-            trained_epochs = self._train_with_early_stopping(gp_model, mll, epochs)
-            print(f"[DEBUG] Training completed in {trained_epochs} epochs")
+            trained_epochs = self.train_with_early_stopping(gp_model, mll, epochs)
             
             # Compute MLL score
             with torch.no_grad():
                 output = gp_model(gp_model.train_inputs[0])
                 mll_score = -mll(output, gp_model.train_targets).item()
-                print(f"[DEBUG] MLL score: {mll_score}")
                 
                 # Check if score is valid
                 if torch.isnan(torch.tensor(mll_score)) or torch.isinf(torch.tensor(mll_score)):
-                    print(f"[DEBUG] Invalid MLL score: {mll_score}")
                     return float('-inf')
                 
                 # Compute combined score (only MLL for now)
                 combined_score = self.mll_weight * mll_score
-                print(f"[DEBUG] Final score: {combined_score}")
+                
+                # TODO: Add CV score when cv_weight > 0
+                # cv_score = -self.compute_kfold_cv_score(gp_model, mll)
+                # combined_score += self.cv_weight * cv_score
+                
                 return combined_score
                 
         except Exception as e:
-            print(f"[DEBUG] Error in _evaluate_kernel_config for config {config}: {str(e)}")
-            import traceback
-            traceback.print_exc()
             return float('-inf')
     
-    def _setup_transformations(self):
+    def setup_transformations(self):
         """Setup transformations like in BaseGPModel."""
         input_scaling_method = self.scaling_dict.get('input') if self.scaling_dict else None
         output_scaling_method = self.scaling_dict.get('output') if self.scaling_dict else None
@@ -308,7 +312,7 @@ class HyperbandKernelSelector:
 
         return outcome_transformation_method, input_transformation_method
     
-    def _train_with_early_stopping(self, gp_model: BaseGPModel, mll: ExactMarginalLogLikelihood, max_epochs: int) -> int:
+    def train_with_early_stopping(self, gp_model: BaseGPModel, mll: ExactMarginalLogLikelihood, max_epochs: int) -> int:
         """
         Train GP model with early stopping based on convergence detection.
         
@@ -375,7 +379,7 @@ class HyperbandKernelSelector:
         
         return max_epochs
     
-    def _compute_marginal_log_likelihood(self, gp_model: BaseGPModel) -> float:
+    def compute_marginal_log_likelihood(self, gp_model: BaseGPModel) -> float:
         """Compute the marginal log-likelihood."""
         try:
             mll = MLLFactory.create_mll('ExactMarginalLogLikelihood', gp_model.gp_model, gp_model.likelihood)
@@ -387,7 +391,7 @@ class HyperbandKernelSelector:
         except:
             return float('-inf')
     
-    def _compute_kfold_cv_score(self, gp_model, mll):
+    def compute_kfold_cv_score(self, gp_model, mll):
         """
         Compute K-Fold Cross-Validation score for the GP model.
         
@@ -439,7 +443,7 @@ class HyperbandKernelSelector:
                 model.train()
                 mll_cv = ExactMarginalLogLikelihood(model.likelihood, model)
                 output = model(X_test)
-                score = mll_cv(output, Y_test).item()
+                score = -mll_cv(output, Y_test).item()  # Make positive for consistency
                 scores.append(score)
                 
             except Exception as e:
@@ -449,7 +453,7 @@ class HyperbandKernelSelector:
         # Return average score, or -inf if all failed
         return sum(scores) / len(scores) if scores else float('-inf')
     
-    def _create_kernel_from_config(self, config: Dict[str, Any]) -> Kernel:
+    def create_kernel_from_config(self, config: Dict[str, Any]) -> Kernel:
         """
         Create a kernel instance from configuration.
         
@@ -461,13 +465,11 @@ class HyperbandKernelSelector:
         """
         try:
             kernel_type = config['type']
-            print(f"[DEBUG] Creating kernel: {kernel_type} with config: {config}")
             
             if kernel_type == 'RBF':
                 # Convert tensor parameters to floats
                 lengthscale = float(config['lengthscale'])
                 variance = float(config['variance'])
-                print(f"[DEBUG] RBF params - lengthscale: {lengthscale} (type: {type(lengthscale)}), variance: {variance}")
                 
                 # RBF doesn't have variance parameter, wrap with ScaleKernel
                 base_kernel = KernelFactory.create_kernel('RBF', lengthscale=lengthscale)
@@ -484,8 +486,6 @@ class HyperbandKernelSelector:
                 valid_nu_values = [0.5, 1.5, 2.5]
                 nu = min(valid_nu_values, key=lambda x: abs(x - nu_raw))
                 
-                print(f"[DEBUG] Matern params - lengthscale: {lengthscale}, nu: {nu} (rounded from {nu_raw}), variance: {variance}")
-                
                 # Matern doesn't have variance parameter, wrap with ScaleKernel
                 base_kernel = KernelFactory.create_kernel('Matern', lengthscale=lengthscale, nu=nu)
                 return ScaleKernel(base_kernel, outputscale=variance)
@@ -494,7 +494,6 @@ class HyperbandKernelSelector:
                 # Convert tensor parameters to floats
                 variance = float(config['variance'])
                 offset = float(config['offset'])
-                print(f"[DEBUG] Linear params - variance: {variance}, offset: {offset}")
                 
                 # Linear has variance parameter, no need for ScaleKernel
                 return KernelFactory.create_kernel('Linear', variance=variance, offset=offset)
@@ -504,7 +503,6 @@ class HyperbandKernelSelector:
                 lengthscale = float(config['lengthscale'])
                 period = float(config['period'])
                 variance = float(config['variance'])
-                print(f"[DEBUG] Periodic params - lengthscale: {lengthscale}, period: {period}, variance: {variance}")
                 
                 # Periodic doesn't have variance parameter, wrap with ScaleKernel
                 base_kernel = KernelFactory.create_kernel('Periodic', lengthscale=lengthscale, period=period)
@@ -515,7 +513,6 @@ class HyperbandKernelSelector:
                 variance = float(config['variance'])
                 offset = float(config['offset'])
                 power = int(config['power'])  # Power should be integer
-                print(f"[DEBUG] Polynomial params - variance: {variance}, offset: {offset}, power: {power}")
                 
                 # Polynomial has variance parameter, no need for ScaleKernel
                 return KernelFactory.create_kernel('Polynomial', variance=variance, offset=offset, power=power)
@@ -524,17 +521,14 @@ class HyperbandKernelSelector:
                 raise ValueError(f"Unknown kernel type: {kernel_type}")
                 
         except Exception as e:
-            print(f"[DEBUG] Error in _create_kernel_from_config for config {config}: {str(e)}")
-            import traceback
-            traceback.print_exc()
             raise
     
-    def _generate_lhs_samples(self):
+    def generate_lhs_samples(self):
         """Pre-generate LHS samples for all kernel types to ensure good coverage."""
         self.lhs_samples = {}
         # Calculate optimal number of samples per kernel type
         n_kernel_types = 5  # RBF, Matern, Linear, Periodic, Polynomial
-        samples_per_kernel = max(10, self.config.max_iter // n_kernel_types)
+        samples_per_kernel = max(20, self.config.max_iter // n_kernel_types)
         
         # RBF kernel samples (angepasste Bounds)
         rbf_bounds = {
