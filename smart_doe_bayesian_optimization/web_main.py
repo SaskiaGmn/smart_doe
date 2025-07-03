@@ -53,7 +53,7 @@ def setup_first_model(num_dimensions: int = 3, bounds: dict = None, sampling_met
         
         # Select the best kernel
         best_kernel = selector.select_kernel(random_seed=42)
-        print(f"✅ Kernel ausgewählt: {type(best_kernel).__name__}")
+        print(f"Kernel ausgewählt: {type(best_kernel).__name__}")
         print(f"Kernel: {best_kernel}")
 
         likelihood = LikelihoodFactory.create_likelihood(
