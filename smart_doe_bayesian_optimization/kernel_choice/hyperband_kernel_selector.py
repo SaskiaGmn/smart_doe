@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from sampler.lhs import build_lhs
 from botorch.models.transforms.outcome import Standardize
 from botorch.models.transforms.input import Normalize
+from sklearn.model_selection import KFold
 
 @dataclass
 class HyperbandConfig:
@@ -31,7 +32,7 @@ class HyperbandKernelSelector:
     
     def __init__(self, train_X: torch.Tensor, train_Y: torch.Tensor, 
                  bounds_list: List[Tuple], scaling_dict: Optional[Dict] = None,
-                 mll_weight: float = 1.0, cv_weight: float = 0.0):
+                 mll_weight: float = 0.7, cv_weight: float = 0.3):
         """
         Initialize the Hyperband kernel selector.
         
@@ -276,12 +277,23 @@ class HyperbandKernelSelector:
                 if torch.isnan(torch.tensor(mll_score)) or torch.isinf(torch.tensor(mll_score)):
                     return float('-inf')
                 
-                # Compute combined score (only MLL for now)
-                combined_score = self.mll_weight * mll_score
-                
-                # TODO: Add CV score when cv_weight > 0
-                # cv_score = -self.compute_kfold_cv_score(gp_model, mll)
-                # combined_score += self.cv_weight * cv_score
+                # Compute CV score if weight > 0
+                if self.cv_weight > 0:
+                    cv_score = self.compute_kfold_cv_score(gp_model, mll)
+                    
+                    # Simple normalization: ensure both scores are positive and comparable
+                    # MLL scores are typically negative, CV scores are typically negative
+                    # Make both positive and scale to similar ranges
+                    mll_positive = abs(mll_score)  # Convert to positive
+                    cv_positive = abs(cv_score)    # Convert to positive
+                    
+                    # Scale to [0, 1] range (assuming max reasonable values)
+                    mll_normalized = min(1.0, mll_positive / 50.0)  # Max MLL around 50
+                    cv_normalized = min(1.0, cv_positive / 25.0)    # Max CV around 25
+                    
+                    combined_score = self.mll_weight * mll_normalized + self.cv_weight * cv_normalized
+                else:
+                    combined_score = mll_score
                 
                 return combined_score
                 
@@ -393,7 +405,7 @@ class HyperbandKernelSelector:
     
     def compute_kfold_cv_score(self, gp_model, mll):
         """
-        Compute K-Fold Cross-Validation score for the GP model.
+        Compute K-Fold Cross-Validation score for the GP model using sklearn's KFold.
         
         Args:
             gp_model: Trained GP model (SingleTaskGP object)
@@ -406,26 +418,18 @@ class HyperbandKernelSelector:
         Y = gp_model.train_targets
         n = X.shape[0]
         
-        # Use 5-fold CV for small datasets, 3-fold for very small datasets
+        # Use sklearn's KFold for robust splitting
         k_folds = min(5, n // 2) if n >= 6 else 3
-        fold_size = n // k_folds
+        kfold = KFold(n_splits=k_folds, shuffle=True, random_state=42)
         
         scores = []
         
-        for fold in range(k_folds):
-            # Create train/test split
-            start_idx = fold * fold_size
-            end_idx = start_idx + fold_size if fold < k_folds - 1 else n
-            
-            # Test indices for this fold
-            test_indices = list(range(start_idx, end_idx))
-            # Train indices (all except test)
-            train_indices = [i for i in range(n) if i not in test_indices]
-            
-            X_train = X[train_indices]
-            Y_train = Y[train_indices]
-            X_test = X[test_indices]
-            Y_test = Y[test_indices]
+        # Use sklearn's KFold for splitting, but keep GP-specific evaluation
+        for train_idx, test_idx in kfold.split(X):
+            X_train = X[train_idx]
+            Y_train = Y[train_idx]
+            X_test = X[test_idx]
+            Y_test = Y[test_idx]
             
             try:
                 # Create new model for this fold
@@ -439,11 +443,44 @@ class HyperbandKernelSelector:
                     input_transform=gp_model.input_transform
                 )
                 
-                # Quick training for CV (fewer epochs)
+                # Quick training for CV (fewer epochs for speed)
                 model.train()
                 mll_cv = ExactMarginalLogLikelihood(model.likelihood, model)
-                output = model(X_test)
-                score = -mll_cv(output, Y_test).item()  # Make positive for consistency
+                
+                # Train CV model with same approach as main model
+                optimizer_cv = torch.optim.Adam(model.parameters(), lr=0.1)
+                
+                # Use same training approach as main model but with early stopping
+                patience = 5  # Shorter patience for CV
+                best_loss = float('inf')
+                patience_counter = 0
+                
+                for epoch in range(min(50, len(X_train) * 2)):  # More reasonable max epochs
+                    optimizer_cv.zero_grad()
+                    output = model(X_train)
+                    loss = -mll_cv(output, Y_train)
+                    if loss.dim() > 0:
+                        loss = loss.sum()
+                    loss.backward()
+                    optimizer_cv.step()
+                    
+                    current_loss = loss.item()
+                    
+                    # Early stopping for CV
+                    if current_loss < best_loss - 1e-4:
+                        best_loss = current_loss
+                        patience_counter = 0
+                    else:
+                        patience_counter += 1
+                    
+                    if patience_counter >= patience and epoch >= 10:  # Minimum 10 epochs
+                        break
+                
+                # Evaluate on test set
+                model.eval()
+                with torch.no_grad():
+                    output = model(X_test)
+                    score = -mll_cv(output, Y_test).item()  # Make positive for consistency
                 scores.append(score)
                 
             except Exception as e:
