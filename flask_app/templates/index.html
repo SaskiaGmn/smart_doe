@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bayesian Optimization</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .parameter-list {
+            margin: 20px 0;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .parameter {
+            margin: 10px 0;
+        }
+        .bounds-input {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .bounds-input input {
+            width: 100px;
+            margin: 0 10px;
+        }
+        input[type="number"] {
+            width: 100px;
+            padding: 5px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .error {
+            color: red;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Bayesian Optimization</h1>
+    
+    <div id="initialization">
+        <h2>Initialisierung</h2>
+        <label for="numParams">Anzahl der Parameter:</label>
+        <input type="number" id="numParams" value="3" min="1">
+        <div style="margin: 20px 0;">
+            <label for="samplingMethod">Sampling-Methode:</label>
+            <select id="samplingMethod" onchange="handleSamplingMethodChange()">
+                <option value="lhs">Latin Hypercube Sampling (LHS)</option>
+                <option value="space_filling_lhs">Space-Filling LHS</option>
+                <option value="fractional_factorial">Fractional Factorial</option>
+                <option value="full_factorial">Full Factorial</option>
+                <option value="taguchi">Taguchi (Orthogonal Arrays)</option>
+            </select>
+        </div>
+        <div id="mainFactorsInput" style="display: none; margin: 20px 0;">
+            <label for="mainFactors">Anzahl der Hauptfaktoren:</label>
+            <input type="number" id="mainFactors" value="3" min="2">
+        </div>
+        <button onclick="showBoundsInput()">Weiter</button>
+    </div>
+
+    <div id="bounds-input" style="display: none;">
+        <h2>Parameter-Grenzen definieren</h2>
+        <div id="bounds-container"></div>
+        <button onclick="initializeModel()">Start</button>
+    </div>
+
+    <div id="optimization" style="display: none;">
+        <h2>Aktuelle Vorschläge</h2>
+        <div id="parameter-list" class="parameter-list"></div>
+        
+        <h2>Beobachtung eingeben</h2>
+        <input type="number" id="observation" step="any">
+        <button onclick="submitObservation()">Absenden</button>
+    </div>
+
+    <div id="error" class="error"></div>
+
+    <script>
+        function handleSamplingMethodChange() {
+            const samplingMethod = document.getElementById('samplingMethod').value;
+            const mainFactorsInput = document.getElementById('mainFactorsInput');
+            mainFactorsInput.style.display = samplingMethod === 'fractional_factorial' ? 'block' : 'none';
+        }
+
+        function showBoundsInput() {
+            const numParams = parseInt(document.getElementById('numParams').value);
+            const container = document.getElementById('bounds-container');
+            container.innerHTML = '';
+            
+            for (let i = 0; i < numParams; i++) {
+                const div = document.createElement('div');
+                div.className = 'bounds-input';
+                div.innerHTML = `
+                    <label>Parameter ${i + 1}:</label>
+                    <input type="number" id="min_${i}" placeholder="Minimum" step="any">
+                    <input type="number" id="max_${i}" placeholder="Maximum" step="any">
+                `;
+                container.appendChild(div);
+            }
+            
+            document.getElementById('bounds-input').style.display = 'block';
+        }
+
+        function initializeModel() {
+            const numParams = parseInt(document.getElementById('numParams').value);
+            const samplingMethod = document.getElementById('samplingMethod').value;
+            const bounds = {};
+            
+            for (let i = 0; i < numParams; i++) {
+                const min = parseFloat(document.getElementById(`min_${i}`).value);
+                const max = parseFloat(document.getElementById(`max_${i}`).value);
+                
+                if (isNaN(min) || isNaN(max)) {
+                    showError('Bitte geben Sie für alle Parameter gültige Grenzen ein.');
+                    return;
+                }
+                
+                if (min >= max) {
+                    showError(`Parameter ${i + 1}: Minimum muss kleiner als Maximum sein.`);
+                    return;
+                }
+                
+                bounds[`x${i+1}_range`] = [min, max];
+            }
+            
+            fetch('/initialize', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    num_dimensions: numParams,
+                    bounds: bounds,
+                    sampling_method: samplingMethod,
+                    main_factors: samplingMethod === 'fractional_factorial' ? parseInt(document.getElementById('mainFactors').value) : undefined
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    document.getElementById('bounds-input').style.display = 'none';
+                    document.getElementById('optimization').style.display = 'block';
+                    updateParameterList(data.suggestion);
+                } else {
+                    showError(data.message || 'Failed to initialize model');
+                }
+            })
+            .catch(error => {
+                showError('Error: ' + error.message);
+            });
+        }
+
+        function submitObservation() {
+            const observation = document.getElementById('observation').value;
+            
+            fetch('/submit_observation', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    observation: parseFloat(observation)
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    updateParameterList(data.suggestion);
+                    document.getElementById('observation').value = '';
+                } else {
+                    showError(data.message);
+                }
+            })
+            .catch(error => showError(error));
+        }
+
+        function updateParameterList(suggestion) {
+            const container = document.getElementById('parameter-list');
+            container.innerHTML = '';
+            
+            suggestion.forEach((value, index) => {
+                const div = document.createElement('div');
+                div.className = 'parameter';
+                div.textContent = `Parameter ${index + 1}: ${value.toFixed(4)}`;
+                container.appendChild(div);
+            });
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+        }
+    </script>
+</body>
+</html>
