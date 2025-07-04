@@ -11,7 +11,6 @@ from models.optimizer_factory import OptimizerFactory
 
 import matplotlib.pyplot as plt
 from gpytorch.priors.torch_priors import GammaPrior
-
 from optimization.bayesian_optimization_loop import BayesianOptimizationLoop
 from kernel_choice.hyperband_kernel_selector import HyperbandKernelSelector
 
