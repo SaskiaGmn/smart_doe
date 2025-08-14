@@ -1,0 +1,10 @@
+[33m33c06c3[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m Added multi-output support. Cross validation still reports problems that need to be fixed.
+[33me71945a[m Functioning code with multi-output. Cross validation still reports problems that need to be fixed.
+[33md51bade[m Update optimization loop to require output weights and optimization directions for multi-output models.
+[33m71a1e4e[m Working Multi-Outputt Optimization. Add debugging scripts for acquisition functions, Flask simulation, and ICM kernel. Enhance kernel creation and model training processes.
+[33m9ad60b2[m Hyperband works but still some problems with multitask
+[33mb619e98[m Initial commit
+[33m36180ee[m Initial commit
+[33m38a64f2[m Refactor kernel selection print statement for clarity
+[33m2529863[m Enhanced kernel selection process by integrating K-Fold cross-validation and adjusting weight parameters for better model evaluation.
+[33m90f9f1e[m Tidyed up automatic kernel selection
