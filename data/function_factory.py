@@ -19,6 +19,8 @@ This also holds true for the output, it needs to be in the shape of ([n, d])
 
 '''
 
+# TODO: Delete not used functions
+
 class FunctionFactory:
     @staticmethod
     def check_dimensions(inputs, expected_shape):
@@ -62,3 +64,113 @@ class FunctionFactory:
         result = (inputs ** 2) * weights
         # Sum over all dimensions
         return result.sum(dim=1, keepdim=True), 1
+
+    # Multi-output functions
+    @staticmethod
+    def multi_output_quadratic(inputs, num_outputs=2):
+        """
+        Creates multiple outputs based on quadratic functions.
+        Each output is a different combination of the input dimensions.
+        
+        Args:
+            inputs: Input tensor of shape [n, d]
+            num_outputs: Number of outputs to generate (1-5)
+            
+        Returns:
+            outputs: Output tensor of shape [n, num_outputs]
+            num_outputs: Number of outputs
+        """
+        n, d = inputs.shape
+        outputs = torch.zeros(n, num_outputs, device=inputs.device)
+        
+        for i in range(num_outputs):
+            if i == 0:
+                # First output: sum of squares
+                outputs[:, i] = (inputs ** 2).sum(dim=1)
+            elif i == 1:
+                # Second output: sum of absolute values
+                outputs[:, i] = torch.abs(inputs).sum(dim=1)
+            elif i == 2:
+                # Third output: product of first two dimensions (if available)
+                if d >= 2:
+                    outputs[:, i] = inputs[:, 0] * inputs[:, 1]
+                else:
+                    outputs[:, i] = inputs[:, 0] ** 2
+            elif i == 3:
+                # Fourth output: maximum value
+                outputs[:, i] = torch.max(inputs, dim=1)[0]
+            elif i == 4:
+                # Fifth output: minimum value
+                outputs[:, i] = torch.min(inputs, dim=1)[0]
+        
+        return outputs, num_outputs
+    
+    @staticmethod
+    def multi_output_trigonometric(inputs, num_outputs=2):
+        """
+        Creates multiple outputs based on trigonometric functions.
+        
+        Args:
+            inputs: Input tensor of shape [n, d]
+            num_outputs: Number of outputs to generate (1-5)
+            
+        Returns:
+            outputs: Output tensor of shape [n, num_outputs]
+            num_outputs: Number of outputs
+        """
+        n, d = inputs.shape
+        outputs = torch.zeros(n, num_outputs, device=inputs.device)
+        
+        for i in range(num_outputs):
+            if i == 0:
+                # First output: sum of sines
+                outputs[:, i] = torch.sin(inputs).sum(dim=1)
+            elif i == 1:
+                # Second output: sum of cosines
+                outputs[:, i] = torch.cos(inputs).sum(dim=1)
+            elif i == 2:
+                # Third output: sum of sin^2
+                outputs[:, i] = (torch.sin(inputs) ** 2).sum(dim=1)
+            elif i == 3:
+                # Fourth output: sum of cos^2
+                outputs[:, i] = (torch.cos(inputs) ** 2).sum(dim=1)
+            elif i == 4:
+                # Fifth output: alternating sin/cos
+                outputs[:, i] = torch.sin(inputs[:, 0]) + torch.cos(inputs[:, min(1, d-1)])
+        
+        return outputs, num_outputs
+    
+    @staticmethod
+    def multi_output_mixed(inputs, num_outputs=2):
+        """
+        Creates multiple outputs with mixed function types.
+        
+        Args:
+            inputs: Input tensor of shape [n, d]
+            num_outputs: Number of outputs to generate (1-5)
+            
+        Returns:
+            outputs: Output tensor of shape [n, num_outputs]
+            num_outputs: Number of outputs
+        """
+        n, d = inputs.shape
+        outputs = torch.zeros(n, num_outputs, device=inputs.device)
+        
+        for i in range(num_outputs):
+            if i == 0:
+                # First output: linear combination
+                outputs[:, i] = inputs.sum(dim=1)
+            elif i == 1:
+                # Second output: quadratic combination
+                outputs[:, i] = (inputs ** 2).sum(dim=1)
+            elif i == 2:
+                # Third output: exponential
+                outputs[:, i] = torch.exp(-inputs.sum(dim=1))
+            elif i == 3:
+                # Fourth output: logarithmic (with offset to avoid log(0))
+                outputs[:, i] = torch.log(1 + torch.abs(inputs).sum(dim=1))
+            elif i == 4:
+                # Fifth output: sigmoid
+                outputs[:, i] = torch.sigmoid(inputs.sum(dim=1))
+        
+        return outputs, num_outputs

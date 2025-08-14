@@ -4,19 +4,16 @@ from sampler import build_lhs, build_space_filling_lhs, build_fractional_factori
 
 # TODO: implement transform data function
 # TODO: implement receive dataset from filepath function
-# TODO: Bounds integration, especially for the filepath acquiring of data
-# TODO: further testing, especially for multi input/output functions
-# TODO: what about more robust scaling methods? What about the scaling schedule?
-
-# TODO: the **kwargs should be changed here into a range dict, which is a more clear way of initiating it
+# TODO: what about more robust scaling methods?
 
 class DatasetManager:
-    def __init__(self, dtype: torch.dtype, filepath: str = None, num_input_dimensions: int = 1) -> None:
+    def __init__(self, dtype: torch.dtype, filepath: str = None, num_input_dimensions: int = 1, num_output_dimensions: int = 1) -> None:
         self.dtype = dtype
         self.filepath = filepath
         self.num_input_dimensions = num_input_dimensions
+        self.num_output_dimensions = num_output_dimensions
         self.input_dim = num_input_dimensions
-        self.output_dim = 1  # May be changed to a list of dimensions
+        self.output_dim = num_output_dimensions  
         self.unscaled_data = None
         self.bounds_list = []
 
@@ -41,11 +38,7 @@ class DatasetManager:
                 bounds[key] = value
         
         # Choose the corresponding sampling method
-        if sampling_method == "random":
-            inputs = self._random_sampling(bounds, num_datapoints)
-        elif sampling_method == "grid":
-            inputs = self._grid_sampling(bounds, num_datapoints)
-        elif sampling_method == "lhs":
+        if sampling_method == "lhs":
             inputs = build_lhs(bounds, num_datapoints)
         elif sampling_method == "space_filling_lhs":
             inputs = build_space_filling_lhs(bounds, num_datapoints)
@@ -56,12 +49,19 @@ class DatasetManager:
         elif sampling_method == "taguchi":
             inputs = build_taguchi(bounds)
         else:
-            raise ValueError("Sampling method must be one of: 'random', 'grid', 'lhs', 'space_filling_lhs', 'fractional_factorial', 'full_factorial', 'taguchi'")
+            raise ValueError("Sampling method must be one of: 'lhs', 'space_filling_lhs', 'fractional_factorial', 'full_factorial', 'taguchi'")
 
         self.setbounds(**kwargs)
 
         inputs = inputs.to(self.dtype)
-        outputs, self.output_dim = dataset_func(inputs)
+        
+        # Handle multi-output functions
+        if hasattr(dataset_func, '__name__') and 'multi_output' in dataset_func.__name__:
+            # For multi-output functions, pass the number of outputs
+            outputs, self.output_dim = dataset_func(inputs, num_outputs=self.num_output_dimensions)
+        else:
+            # For single-output functions, use the original behavior
+            outputs, self.output_dim = dataset_func(inputs)
 
         if noise_level > 0:
             outputs = self.add_noise(outputs=outputs, noise_level=noise_level)
@@ -72,19 +72,7 @@ class DatasetManager:
         self.check_shape(inputs, outputs)
         self.check_dimensions(inputs, outputs)
 
-    def _random_sampling(self, bounds: Dict[str, Tuple[float, float]], num_points: int) -> torch.Tensor:
-        """Creates random samples."""
-        inputs = []
-        for range_val in bounds.values():
-            inputs.append(torch.rand(num_points) * (range_val[1] - range_val[0]) + range_val[0])
-        return torch.stack(inputs, dim=1)
 
-    def _grid_sampling(self, bounds: Dict[str, Tuple[float, float]], num_points: int) -> torch.Tensor:
-        """Creates samples on a regular grid."""
-        inputs = []
-        for range_val in bounds.values():
-            inputs.append(torch.linspace(range_val[0], range_val[1], steps=num_points))
-        return torch.stack(inputs, dim=1)
 
     def add_noise(self, outputs: torch.Tensor, noise_level: float):
         """ 

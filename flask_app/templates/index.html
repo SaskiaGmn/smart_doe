@@ -28,6 +28,24 @@
             width: 100px;
             margin: 0 10px;
         }
+        .weight-input {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .weight-input input {
+            width: 80px;
+            margin: 0 5px;
+        }
+        .weight-input select {
+            width: 120px;
+            padding: 5px;
+            margin: 0 5px;
+        }
         input[type="number"] {
             width: 100px;
             padding: 5px;
@@ -47,6 +65,12 @@
             color: red;
             margin: 10px 0;
         }
+        .observation-inputs {
+            margin: 20px 0;
+        }
+        .observation-input {
+            margin: 10px 0;
+        }
     </style>
 </head>
 <body>
@@ -56,6 +80,25 @@
         <h2>Initialisierung</h2>
         <label for="numParams">Anzahl der Parameter:</label>
         <input type="number" id="numParams" value="3" min="1">
+        
+        <div style="margin: 20px 0;">
+            <label for="numOutputs">Anzahl der Outputs:</label>
+            <input type="number" id="numOutputs" value="1" min="1" max="5" onchange="handleNumOutputsChange()">
+        </div>
+        
+        <div id="singleOutputDirection" style="margin: 20px 0;">
+            <label for="singleOptimizationDirection">Optimierungsrichtung:</label>
+            <select id="singleOptimizationDirection">
+                <option value="maximize">Maximieren</option>
+                <option value="minimize">Minimieren</option>
+            </select>
+        </div>
+        
+        <div id="outputWeightsInput" style="display: none; margin: 20px 0;">
+            <h3>Output-Konfiguration:</h3>
+            <div id="outputs-container"></div>
+        </div>
+        
         <div style="margin: 20px 0;">
             <label for="samplingMethod">Sampling-Methode:</label>
             <select id="samplingMethod" onchange="handleSamplingMethodChange()">
@@ -84,13 +127,66 @@
         <div id="parameter-list" class="parameter-list"></div>
         
         <h2>Beobachtung eingeben</h2>
-        <input type="number" id="observation" step="any">
+        <div id="observation-inputs" class="observation-inputs">
+            <div id="single-observation" class="observation-input">
+                <input type="number" id="observation" step="any" placeholder="Beobachtungswert">
+            </div>
+            <div id="multi-observation" class="observation-input" style="display: none;">
+                <div id="multi-observation-container"></div>
+            </div>
+        </div>
         <button onclick="submitObservation()">Absenden</button>
     </div>
 
     <div id="error" class="error"></div>
 
     <script>
+        let currentNumOutputs = 1;
+        
+        function handleNumOutputsChange() {
+            currentNumOutputs = parseInt(document.getElementById('numOutputs').value);
+            const weightsInput = document.getElementById('outputWeightsInput');
+            const outputsContainer = document.getElementById('outputs-container');
+            const singleOutputDirection = document.getElementById('singleOutputDirection');
+            
+            if (currentNumOutputs > 1) {
+                weightsInput.style.display = 'block';
+                singleOutputDirection.style.display = 'none';
+                outputsContainer.innerHTML = '';
+                
+                for (let i = 0; i < currentNumOutputs; i++) {
+                    const div = document.createElement('div');
+                    div.className = 'weight-input';
+                    div.innerHTML = `
+                        <label>Output ${i + 1}:</label>
+                        <select id="optimization_direction_${i}" onchange="validateWeights()">
+                            <option value="maximize">Maximieren</option>
+                            <option value="minimize">Minimieren</option>
+                        </select>
+                        <label>Gewicht:</label>
+                        <input type="number" id="weight_${i}" value="${(1/currentNumOutputs).toFixed(3)}" step="0.001" min="0" max="1" onchange="validateWeights()">
+                    `;
+                    outputsContainer.appendChild(div);
+                }
+            } else {
+                weightsInput.style.display = 'none';
+                singleOutputDirection.style.display = 'block';
+            }
+        }
+        
+        function validateWeights() {
+            let sum = 0;
+            for (let i = 0; i < currentNumOutputs; i++) {
+                sum += parseFloat(document.getElementById(`weight_${i}`).value);
+            }
+            
+            if (Math.abs(sum - 1.0) > 0.001) {
+                document.getElementById('error').textContent = `Warnung: Gewichte summieren sich zu ${sum.toFixed(3)}, sollten 1.0 sein`;
+            } else {
+                document.getElementById('error').textContent = '';
+            }
+        }
+        
         function handleSamplingMethodChange() {
             const samplingMethod = document.getElementById('samplingMethod').value;
             const mainFactorsInput = document.getElementById('mainFactorsInput');
@@ -120,6 +216,7 @@
             const numParams = parseInt(document.getElementById('numParams').value);
             const samplingMethod = document.getElementById('samplingMethod').value;
             const bounds = {};
+            const optimizationDirections = [];
             
             for (let i = 0; i < numParams; i++) {
                 const min = parseFloat(document.getElementById(`min_${i}`).value);
@@ -138,6 +235,18 @@
                 bounds[`x${i+1}_range`] = [min, max];
             }
             
+            // Get output weights if multi-output
+            let outputWeights = null;
+            if (currentNumOutputs > 1) {
+                outputWeights = [];
+                for (let i = 0; i < currentNumOutputs; i++) {
+                    outputWeights.push(parseFloat(document.getElementById(`weight_${i}`).value));
+                    optimizationDirections.push(document.getElementById(`optimization_direction_${i}`).value);
+                }
+            } else {
+                optimizationDirections.push(document.getElementById('singleOptimizationDirection').value);
+            }
+            
             fetch('/initialize', {
                 method: 'POST',
                 headers: {
@@ -147,7 +256,10 @@
                     num_dimensions: numParams,
                     bounds: bounds,
                     sampling_method: samplingMethod,
-                    main_factors: samplingMethod === 'fractional_factorial' ? parseInt(document.getElementById('mainFactors').value) : undefined
+                    main_factors: samplingMethod === 'fractional_factorial' ? parseInt(document.getElementById('mainFactors').value) : undefined,
+                    num_outputs: currentNumOutputs,
+                    output_weights: outputWeights,
+                    optimization_directions: optimizationDirections
                 })
             })
             .then(response => response.json())
@@ -156,6 +268,7 @@
                     document.getElementById('bounds-input').style.display = 'none';
                     document.getElementById('optimization').style.display = 'block';
                     updateParameterList(data.suggestion);
+                    updateObservationInputs(data.num_outputs);
                 } else {
                     showError(data.message || 'Failed to initialize model');
                 }
@@ -165,8 +278,50 @@
             });
         }
 
+        function updateObservationInputs(numOutputs) {
+            const singleObs = document.getElementById('single-observation');
+            const multiObs = document.getElementById('multi-observation');
+            const multiContainer = document.getElementById('multi-observation-container');
+            
+            if (numOutputs === 1) {
+                singleObs.style.display = 'block';
+                multiObs.style.display = 'none';
+            } else {
+                singleObs.style.display = 'none';
+                multiObs.style.display = 'block';
+                
+                multiContainer.innerHTML = '';
+                for (let i = 0; i < numOutputs; i++) {
+                    const div = document.createElement('div');
+                    div.innerHTML = `
+                        <label>Output ${i + 1}:</label>
+                        <input type="number" id="obs_${i}" step="any" placeholder="Beobachtungswert ${i + 1}">
+                    `;
+                    multiContainer.appendChild(div);
+                }
+            }
+        }
+
         function submitObservation() {
-            const observation = document.getElementById('observation').value;
+            let observation;
+            
+            if (currentNumOutputs === 1) {
+                observation = parseFloat(document.getElementById('observation').value);
+                if (isNaN(observation)) {
+                    showError('Bitte geben Sie einen gültigen Beobachtungswert ein.');
+                    return;
+                }
+            } else {
+                observation = [];
+                for (let i = 0; i < currentNumOutputs; i++) {
+                    const value = parseFloat(document.getElementById(`obs_${i}`).value);
+                    if (isNaN(value)) {
+                        showError(`Bitte geben Sie einen gültigen Wert für Output ${i + 1} ein.`);
+                        return;
+                    }
+                    observation.push(value);
+                }
+            }
             
             fetch('/submit_observation', {
                 method: 'POST',
@@ -174,14 +329,21 @@
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    observation: parseFloat(observation)
+                    observation: observation
                 })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'success') {
                     updateParameterList(data.suggestion);
-                    document.getElementById('observation').value = '';
+                    // Clear observation inputs
+                    if (currentNumOutputs === 1) {
+                        document.getElementById('observation').value = '';
+                    } else {
+                        for (let i = 0; i < currentNumOutputs; i++) {
+                            document.getElementById(`obs_${i}`).value = '';
+                        }
+                    }
                 } else {
                     showError(data.message);
                 }
@@ -205,6 +367,11 @@
             const errorDiv = document.getElementById('error');
             errorDiv.textContent = message;
         }
+        
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', function() {
+            handleNumOutputsChange();
+        });
     </script>
 </body>
 </html>

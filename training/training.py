@@ -1,5 +1,5 @@
 from typing import Union
-from botorch.models import SingleTaskGP, HeteroskedasticSingleTaskGP, FixedNoiseGP
+from botorch.models import SingleTaskGP
 from torch.optim import Adam, SGD
 from gpytorch.mlls import ExactMarginalLogLikelihood, MarginalLogLikelihood
 import torch
@@ -17,7 +17,7 @@ def training_gp_model(gp_model: ExactGP,
                       mll: Union[ExactMarginalLogLikelihood, MarginalLogLikelihood], 
                       train_X: torch.Tensor, 
                       train_Y: torch.Tensor, 
-                      num_epochs: int) -> Union[SingleTaskGP, HeteroskedasticSingleTaskGP, FixedNoiseGP]:
+                      num_epochs: int) -> ExactGP:
     """
     Trains a Gaussian Process (GP) model using gradient descent optimization to minimize the 
     negative marginal log likelihood (MLL).
@@ -27,7 +27,7 @@ def training_gp_model(gp_model: ExactGP,
     calculating the loss as the negative MLL, and using backpropagation to update the model's parameters.
 
     Parameters:
-    - gp_model (Union[SingleTaskGP, HeteroskedasticSingleTaskGP, FixedNoiseGP]): The Gaussian Process model to train.
+    - gp_model (ExactGP): The Gaussian Process model to train.
       This could be a standard GP, a heteroskedastic GP, or a GP with fixed noise levels.
     - optimizer (Union[Adam, SGD]): The optimization algorithm to use for training. Could be either Adam or SGD.
     - mll (Union[ExactMarginalLogLikelihood, MarginalLogLikelihood]): The Marginal Log Likelihood object used 
@@ -37,7 +37,7 @@ def training_gp_model(gp_model: ExactGP,
     - num_epochs (int): The number of training iterations to perform.
 
     Returns:
-    - Union[SingleTaskGP, HeteroskedasticSingleTaskGP, FixedNoiseGP]: The trained GP model.
+    - ExactGP: The trained GP model.
     """
     gp_model.train()
 
